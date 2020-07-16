@@ -45,7 +45,6 @@ class MemCacheStoreTest < ActiveSupport::TestCase
     @namespace = "test-#{SecureRandom.hex}"
     @cache = lookup_store(expires_in: 60)
     @peek = lookup_store
-    @data = @cache.instance_variable_get(:@data)
     @cache.silence!
     @cache.logger = ActiveSupport::Logger.new(File::NULL)
   end
@@ -63,7 +62,7 @@ class MemCacheStoreTest < ActiveSupport::TestCase
   # Overrides test from LocalCacheBehavior in order to stub out the cache clear
   # and replace it with a delete.
   def test_clear_also_clears_local_cache
-    client = @cache.instance_variable_get(:@data)
+    client = @cache.mem_cache
     key = "#{@namespace}:foo"
     client.stub(:flush_all, -> { client.delete(key) }) do
       super
@@ -92,14 +91,14 @@ class MemCacheStoreTest < ActiveSupport::TestCase
 
   def test_increment_expires_in
     cache = lookup_store(raw: true, namespace: nil)
-    assert_called_with cache.instance_variable_get(:@data), :incr, [ "foo", 1, 60 ] do
+    assert_called_with cache.mem_cache, :incr, [ "foo", 1, 60 ] do
       cache.increment("foo", 1, expires_in: 60)
     end
   end
 
   def test_decrement_expires_in
     cache = lookup_store(raw: true, namespace: nil)
-    assert_called_with cache.instance_variable_get(:@data), :decr, [ "foo", 1, 60 ] do
+    assert_called_with cache.mem_cache, :decr, [ "foo", 1, 60 ] do
       cache.decrement("foo", 1, expires_in: 60)
     end
   end
