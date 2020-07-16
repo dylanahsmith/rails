@@ -96,6 +96,11 @@ module ActiveSupport
         end
       end
 
+      # Get the underlying Dalli::Client or ConnectionPool instance
+      def mem_cache
+        @data
+      end
+
       # Increment a cached value. This method uses the memcached incr atomic
       # operator and can only be used on values written with the :raw option.
       # Calling it on a value not stored with :raw will initialize that value
