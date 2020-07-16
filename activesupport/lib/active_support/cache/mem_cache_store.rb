@@ -71,6 +71,9 @@ module ActiveSupport
         end
       end
 
+      # Get the underlying Dalli::Client or ConnectionPool instance
+      attr_reader :mem_cache
+
       # Creates a new MemCacheStore object, with the given memcached server
       # addresses. Each address is either a host name, or a host-with-port string
       # in the form of "host_name:port". For example:
@@ -88,17 +91,12 @@ module ActiveSupport
           raise ArgumentError, "First argument must be an empty array, an array of hosts or a Dalli::Client instance."
         end
         if addresses.first.is_a?(Dalli::Client)
-          @data = addresses.first
+          @mem_cache = addresses.first
         else
           mem_cache_options = options.dup
           UNIVERSAL_OPTIONS.each { |name| mem_cache_options.delete(name) }
-          @data = self.class.build_mem_cache(*(addresses + [mem_cache_options]))
+          @mem_cache = self.class.build_mem_cache(*(addresses + [mem_cache_options]))
         end
-      end
-
-      # Get the underlying Dalli::Client or ConnectionPool instance
-      def mem_cache
-        @data
       end
 
       # Increment a cached value. This method uses the memcached incr atomic
@@ -109,7 +107,7 @@ module ActiveSupport
         options = merged_options(options)
         instrument(:increment, name, amount: amount) do
           rescue_error_with nil do
-            @data.with { |c| c.incr(normalize_key(name, options), amount, options[:expires_in]) }
+            @mem_cache.with { |c| c.incr(normalize_key(name, options), amount, options[:expires_in]) }
           end
         end
       end
@@ -122,7 +120,7 @@ module ActiveSupport
         options = merged_options(options)
         instrument(:decrement, name, amount: amount) do
           rescue_error_with nil do
-            @data.with { |c| c.decr(normalize_key(name, options), amount, options[:expires_in]) }
+            @mem_cache.with { |c| c.decr(normalize_key(name, options), amount, options[:expires_in]) }
           end
         end
       end
@@ -130,18 +128,18 @@ module ActiveSupport
       # Clear the entire cache on all memcached servers. This method should
       # be used with care when shared cache is being used.
       def clear(options = nil)
-        rescue_error_with(nil) { @data.with { |c| c.flush_all } }
+        rescue_error_with(nil) { @mem_cache.with { |c| c.flush_all } }
       end
 
       # Get the statistics from the memcached servers.
       def stats
-        @data.with { |c| c.stats }
+        @mem_cache.with { |c| c.stats }
       end
 
       private
         # Read an entry from the cache.
         def read_entry(key, **options)
-          rescue_error_with(nil) { deserialize_entry(@data.with { |c| c.get(key, options) }) }
+          rescue_error_with(nil) { deserialize_entry(@mem_cache.with { |c| c.get(key, options) }) }
         end
 
         # Write an entry to the cache.
@@ -154,7 +152,7 @@ module ActiveSupport
             expires_in += 5.minutes
           end
           rescue_error_with false do
-            @data.with { |c| c.send(method, key, value, expires_in, **options) }
+            @mem_cache.with { |c| c.send(method, key, value, expires_in, **options) }
           end
         end
 
@@ -162,7 +160,7 @@ module ActiveSupport
         def read_multi_entries(names, **options)
           keys_to_names = names.index_by { |name| normalize_key(name, options) }
 
-          raw_values = @data.with { |c| c.get_multi(keys_to_names.keys) }
+          raw_values = @mem_cache.with { |c| c.get_multi(keys_to_names.keys) }
           values = {}
 
           raw_values.each do |key, value|
@@ -178,7 +176,7 @@ module ActiveSupport
 
         # Delete an entry from the cache.
         def delete_entry(key, **options)
-          rescue_error_with(false) { @data.with { |c| c.delete(key) } }
+          rescue_error_with(false) { @mem_cache.with { |c| c.delete(key) } }
         end
 
         # Memcache keys are binaries. So we need to force their encoding to binary
